@@ -94,6 +94,8 @@ class Gemma:
 
         response = self._generate_response(image_filepath, folder_names)
 
+        print(f"Raw response for {image_filepath}: {response}")
+
         if not self._validate_response(response, folder_names):
             raise ValueError(f"Invalid response format, received: {response}")
 
