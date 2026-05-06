@@ -1,0 +1,16 @@
+[project]
+name = "gemmagems"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13.9"
+dependencies = [
+    "accelerate>=1.13.0",
+    "gemma>=3.3.0",
+    "pre-commit>=4.6.0",
+    "pyside6>=6.11.0",
+    "seaborn>=0.13.2",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "transformers>=5.7.0",
+]
