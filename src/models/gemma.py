@@ -74,10 +74,10 @@ class Gemma:
         # High values (>0.8) are good for creative tasks,
         # low values (e.g. <0.4) for tasks that require “thinking”. Requires do_sample=True.
         outputs = self._model.generate(
-            **inputs, temperature=0.2, do_sample=True, max_new_tokens=100
+            **inputs, temperature=0.2, do_sample=True, max_new_tokens=20
         )
         response = self._processor.decode(
-            outputs[0][input_len:], skip_special_tokens=False
+            outputs[0][input_len:], skip_special_tokens=True
         )
 
         # Parse output
@@ -95,7 +95,7 @@ class Gemma:
         response = self._generate_response(image_filepath, folder_names)
 
         if not self._validate_response(response, folder_names):
-            raise ValueError("Invalid response format")
+            raise ValueError(f"Invalid response format, received: {response}")
 
         folder_name, confidence = response.split(" ")
         return folder_name, float(confidence)

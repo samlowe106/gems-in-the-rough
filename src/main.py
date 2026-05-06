@@ -46,7 +46,7 @@ def main(args):
         model_fn=model.classify,
         image_paths=image_paths,
         folder_names=args.folders,
-        max_workers=2,
+        max_workers=1,
         lookahead=8,
     )
 
