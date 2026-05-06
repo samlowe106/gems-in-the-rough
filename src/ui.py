@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
 
 
 class ImageSorterUI(QWidget):
-    def __init__(self, manager, width=800, height=600):
+    def __init__(
+        self, manager, input_dir="unsorted", output_dir="sorted", width=800, height=600
+    ):
         super().__init__()
 
         self.resize(width, height)
@@ -25,8 +27,8 @@ class ImageSorterUI(QWidget):
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignCenter)
 
-        self.input_dir = "unsorted"
-        self.output_dir = "sorted"
+        self.input_dir = input_dir
+        self.output_dir = output_dir
 
         self.suggestion = QLabel("Loading...")
         self.suggestion.setAlignment(Qt.AlignCenter)

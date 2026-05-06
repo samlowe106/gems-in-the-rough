@@ -26,12 +26,13 @@ def main(args):
 
     app = QApplication(sys.argv)
 
-    print("Selected directory:", args.input_path)
+    print("Selected directory:", args.input_dir)
+    print("Will output to:", args.output_dir)
 
     image_paths = [
-        os.path.join(args.input_path, filename)
-        for filename in os.listdir(args.input_path)
-        if os.path.isfile(os.path.join(args.input_path, filename))
+        os.path.join(args.input_dir, filename)
+        for filename in os.listdir(args.input_dir)
+        if os.path.isfile(os.path.join(args.input_dir, filename))
         and filename.lower().endswith(image_file_extensions)
     ]
 
@@ -50,7 +51,7 @@ def main(args):
         lookahead=8,
     )
 
-    ui = ImageSorterUI(manager)
+    ui = ImageSorterUI(manager, input_dir=args.input_dir, output_dir=args.output_dir)
     ui.show()
     ui.load()
     app.exec()
@@ -66,7 +67,9 @@ if __name__ == "__main__":
         "--input-path", help="Path to the images to be sorted", default="tests/unsorted"
     )
     parser.add_argument(
-        "--output-path", help="Path where the sorted images will be moved to"
+        "--output-path",
+        help="Path where the sorted images will be moved to",
+        default="tests/sorted",
     )
     parser.add_argument(
         "-m", "--model", help="Which Gemma model to use", default="E2B-it"
