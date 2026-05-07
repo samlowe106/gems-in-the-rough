@@ -15,96 +15,110 @@ from PySide6.QtWidgets import (
 
 class ImageSorterUI(QWidget):
     def __init__(
-        self, manager, input_dir="unsorted", output_dir="sorted", width=800, height=600
+        self,
+        manager,
+        folders: list[str],
+        input_dir="unsorted",
+        output_dir="sorted",
+        width=800,
+        height=600,
+        window_title="Gems in the Rough",
     ):
         super().__init__()
 
-        self.resize(width, height)
-
-        self.setWindowTitle("Gems in the Rough")
-
         self.manager = manager
-        self.index = 0
-
-        self.label = QLabel()
-        self.label.setAlignment(Qt.AlignCenter)
-
+        self.folders = folders
         self.input_dir = input_dir
         self.output_dir = output_dir
+        self.resize(width, height)
+        self.setWindowTitle(window_title)
 
-        self.suggestion = QLabel("Loading...")
-        self.suggestion.setAlignment(Qt.AlignCenter)
-        self.suggestion.setMaximumHeight(40)
-        self.suggestion.setStyleSheet("font-size: 16px;")
-        self.current_label = None
+        # I would like to eventually not need this
+        self.index = 0
 
-        self.label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.suggestion.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-
-        accept_key = "Y"
-        skip_key = "N"
-
-        self.accept_button = QPushButton(f"Accept ({accept_key})")
-        self.skip_button = QPushButton(f"Skip ({skip_key})")
-
-        self.accept_button.clicked.connect(self.accept_image)
-        self.skip_button.clicked.connect(self.next)
-
-        self.accept_button.setShortcut(accept_key)
-        self.skip_button.setShortcut(skip_key)
-
+        # region layout
         layout = QVBoxLayout()
-        layout.addWidget(self.label)
-        layout.addWidget(self.suggestion)
 
+        self.image_display = QLabel()
+        self.image_display.setAlignment(Qt.AlignCenter)
+        self.image_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.image_display)
+
+        self.caption = QLabel("Loading...")
+        self.caption.setAlignment(Qt.AlignCenter)
+        self.caption.setMaximumHeight(40)
+        self.caption.setStyleSheet("font-size: 16px;")
+        self.current_label = None
+        self.caption.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        layout.addWidget(self.caption)
+
+        # region buttons
+        self.image_display_buttons = []  # do we even need this field?
         buttons = QHBoxLayout()
-        buttons.addWidget(self.accept_button)
+        for i, folder in enumerate(folders, start=1):
+            button = QPushButton(f"Accept ({i})")
+            button.clicked.connect(lambda _, idx=i - 1: self.accept_image(idx))
+            button.setShortcut(str(i))
+            buttons.addWidget(button)
+            self.image_display_buttons.append(button)
+
+        skip_key = "Space"
+        self.skip_button = QPushButton(f"Skip ({skip_key})")
+        self.skip_button.clicked.connect(self.next)
+        self.skip_button.setShortcut(skip_key)
         buttons.addWidget(self.skip_button)
+        self.image_display_buttons.append(self.skip_button)
 
         layout.addLayout(buttons)
-        self.setLayout(layout)
+        # endregion
 
+        self.setLayout(layout)
         self.manager.result_ready.connect(self.on_result)
 
     def load(self):
+        """
+        Load the current image and display it, along with any cached classification results.
+        """
+        # If we've gone through all the images, show a completion message
         if self.index >= len(self.manager.image_paths):
-            self.suggestion.setText("All done!")
-            self.label.clear()
+            self.caption.setText("All done :)")
+            self.image_display.clear()
             return
 
-        path = self.manager.image_paths[self.index]
-        self.current_image_path = path
+        self.current_image_path = self.manager.image_paths[self.index]
 
-        pixmap = QPixmap(path)
-
-        scaled = pixmap.scaled(
-            self.label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        self.caption.setText(
+            f"{self.current_image_path} ({self.index + 1} / {len(self.manager.image_paths)})"
         )
 
-        self.label.setPixmap(scaled)
+        pixmap = QPixmap(self.current_image_path)
+        self.image_display.setPixmap(
+            pixmap.scaled(
+                self.image_display.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+        )
 
-        if path in self.manager.cache:
-            label, conf = self.manager.cache[path]
-            self.show_result(label, conf)
+        if self.current_image_path in self.manager.cache:
+            labels = self.manager.cache[self.current_image_path]
+            self.show_result(labels)
         else:
-            self.suggestion.setText("Thinking...")
-            self.manager.submit(path)
+            self.show_result(["Thinking..."] * len(self.folders))
+            # self.caption.setText("Thinking...")
+            self.manager.submit(self.current_image_path)
 
         self.manager.update_window(self.index)
 
-    def on_result(self, path, label, conf):
+    def on_result(self, path, labels):
+        # do nothing if a result for a previous item or future item comes in
         if path == self.manager.image_paths[self.index]:
-            self.show_result(label, conf)
+            self.show_result(labels)
 
-    def show_result(self, label, conf):
-        self.current_label = label
-        self.suggestion.setText(f"{label} ({conf:.0%})")
+    def show_result(self, labels):
+        for label, button in zip(labels, self.image_display_buttons):
+            button.setText(f"{label} ({button.shortcut().toString()})")
 
-    def accept_image(self):
-        if not self.current_label:
-            return
-
-        destination_dir = os.path.join(self.output_dir, self.current_label)
+    def accept_image(self, key):
+        destination_dir = os.path.join(self.output_dir, self.folders[key - 1])
         os.makedirs(destination_dir, exist_ok=True)
 
         file_destination = os.path.join(
@@ -119,13 +133,14 @@ class ImageSorterUI(QWidget):
         self.load()
 
     def resizeEvent(self, event):
+        # I don't like that we have to use hasattr here
         if hasattr(self, "current_image_path"):
             pixmap = QPixmap(self.current_image_path)
 
             scaled = pixmap.scaled(
-                self.label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                self.image_display.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
 
-            self.label.setPixmap(scaled)
+            self.image_display.setPixmap(scaled)
 
         super().resizeEvent(event)

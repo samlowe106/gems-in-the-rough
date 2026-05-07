@@ -17,12 +17,21 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 image_file_extensions = (".png", ".jpg", ".jpeg")
 
 
-def main(args):
-    accepted_models = ["E2B-it", "E4B-it", "4-31B-it"]
+def manual_classifier(image_path: str, categories: list[str]) -> list[str]:
+    return categories
 
-    if args.model not in accepted_models:
-        raise ValueError(f"Model must be one of {accepted_models}")
-    model = Gemma(model_name=args.model)
+
+def main(args):
+
+    accepted_modes = ["manual", "E2B-it", "E4B-it", "4-31B-it"]
+
+    if args.mode not in accepted_modes:
+        raise ValueError(f"Mode must be one of {accepted_modes}")
+
+    if args.mode == "manual":
+        classifier = manual_classifier
+    else:
+        classifier = Gemma(model_name=args.model).classify
 
     app = QApplication(sys.argv)
 
@@ -44,7 +53,7 @@ def main(args):
     print("Folder options:", args.folders)
 
     manager = InferenceManager(
-        model_fn=model.classify,
+        model_fn=classifier,
         image_paths=image_paths,
         folder_names=args.folders,
         max_workers=1,
@@ -64,15 +73,15 @@ if __name__ == "__main__":
     # region Argument parsing
     parser = ArgumentParser()
     parser.add_argument(
-        "--input-path", help="Path to the images to be sorted", default="tests/unsorted"
+        "--input-dir", help="Path to the images to be sorted", default="tests/unsorted"
     )
     parser.add_argument(
-        "--output-path",
+        "--output-dir",
         help="Path where the sorted images will be moved to",
         default="tests/sorted",
     )
     parser.add_argument(
-        "-m", "--model", help="Which Gemma model to use", default="E2B-it"
+        "-m", "--mode", help="Which classifier to use", default="E2B-it"
     )
     parser.add_argument(
         "--max-workers",

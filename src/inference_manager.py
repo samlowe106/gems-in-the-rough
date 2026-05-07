@@ -2,16 +2,18 @@ from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
+Labels = list[str]
+
 
 class WorkerSignals(QObject):
-    result = Signal(str, str, float)  # path, label, confidence
+    result = Signal(str, Labels)  # path, labels
 
 
 class InferenceTask(QRunnable):
-    def __init__(self, path: str, model_fn: Callable, folder_names: list[str]):
+    def __init__(self, path: str, classifier: Callable, folder_names: list[str]):
         super().__init__()
         self.path = path
-        self.model_fn = model_fn
+        self.classifier = classifier
         self.folder_names = folder_names
         self.signals = WorkerSignals()
         self._cancelled = False
@@ -24,34 +26,34 @@ class InferenceTask(QRunnable):
         if self._cancelled:
             return
 
-        label, conf = self.model_fn(self.path, folder_names=self.folder_names)
+        labels = self.classifier(self.path, categories=self.folder_names)
 
         if self._cancelled:
             return
 
-        self.signals.result.emit(str(self.path), label, conf)
+        self.signals.result.emit(str(self.path), labels)
 
 
 class InferenceManager(QObject):
-    result_ready = Signal(str, str, float)  # path, label, confidence
+    result_ready = Signal(str, Labels)  # path, labels
 
     def __init__(
         self,
-        model_fn: Callable,
+        classifier: Callable,
         image_paths: list[str],
         folder_names: list[str],
         max_workers=2,
         lookahead=8,
     ):
         super().__init__()
-        self.model_fn = model_fn
+        self.classifier = classifier
         self.image_paths = image_paths
         self.folder_names = folder_names
         self.pool = QThreadPool()
         self.pool.setMaxThreadCount(max_workers)
 
         self.lookahead = lookahead
-        self.cache: dict[str, tuple[str, float]] = {}
+        self.cache: dict[str, Labels] = {}
         self.in_flight: dict[str, InferenceTask] = {}
         self.queue: list[str] = []
 
@@ -65,16 +67,16 @@ class InferenceManager(QObject):
             print("Already in-flight for:", path)
             return
 
-        task = InferenceTask(path, self.model_fn, folder_names=self.folder_names)
+        task = InferenceTask(path, self.classifier, folder_names=self.folder_names)
         self.in_flight[path] = task
 
         task.signals.result.connect(self._on_result)
         self.pool.start(task)
 
-    def _on_result(self, path, label, conf):
-        self.cache[path] = (label, conf)
+    def _on_result(self, path, labels: Labels):
+        self.cache[path] = labels
         self.in_flight.pop(path, None)
-        self.result_ready.emit(path, label, conf)
+        self.result_ready.emit(path, labels)
 
     def update_window(self, current_index):
         self.current_index = current_index
