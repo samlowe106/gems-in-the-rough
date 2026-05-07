@@ -13,25 +13,30 @@ from ui import ImageSorterUI
 # forces Hugging Face libraries to use local files only
 os.environ["HF_HUB_OFFLINE"] = "1"
 
-
 image_file_extensions = (".png", ".jpg", ".jpeg")
+accepted_modes = ["manual", "E2B-it", "E4B-it", "4-31B-it"]
 
 
-def manual_classifier(image_path: str, categories: list[str]) -> list[str]:
-    return categories
+def manual_classifier(image_path: str, categories: list[str], top_k: int) -> list[str]:
+    return categories[:top_k]
 
 
 def main(args):
 
-    accepted_modes = ["manual", "E2B-it", "E4B-it", "4-31B-it"]
+    if not 0 < args.top <= min(len(args.folders), 9):
+        # we require at most 9 so the labels are single digit numbers for easier keyboard input
+        raise ValueError(
+            "Top K must be between 1 and the number of folders (inclusive), and at most 9."
+        )
 
     if args.mode not in accepted_modes:
         raise ValueError(f"Mode must be one of {accepted_modes}")
 
-    if args.mode == "manual":
-        classifier = manual_classifier
-    else:
-        classifier = Gemma(model_name=args.model).classify
+    classifier = (
+        manual_classifier
+        if args.mode == "manual"
+        else Gemma(model_name=args.model).classify
+    )
 
     app = QApplication(sys.argv)
 
@@ -53,14 +58,21 @@ def main(args):
     print("Folder options:", args.folders)
 
     manager = InferenceManager(
-        model_fn=classifier,
+        classifier=lambda path, categories: classifier(
+            path, categories=categories, top_k=args.top
+        ),
         image_paths=image_paths,
-        folder_names=args.folders,
         max_workers=1,
         lookahead=8,
     )
 
-    ui = ImageSorterUI(manager, input_dir=args.input_dir, output_dir=args.output_dir)
+    ui = ImageSorterUI(
+        manager,
+        folders=args.folders,
+        num_buttons=args.top,
+        input_dir=args.input_dir,
+        output_dir=args.output_dir,
+    )
     ui.show()
     ui.load()
     app.exec()
@@ -82,6 +94,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-m", "--mode", help="Which classifier to use", default="E2B-it"
+    )
+    parser.add_argument(
+        "--top", help="How many top categories to return", type=int, default=4
     )
     parser.add_argument(
         "--max-workers",

@@ -41,14 +41,12 @@ class InferenceManager(QObject):
         self,
         classifier: Callable,
         image_paths: list[str],
-        folder_names: list[str],
         max_workers=2,
         lookahead=8,
     ):
         super().__init__()
         self.classifier = classifier
         self.image_paths = image_paths
-        self.folder_names = folder_names
         self.pool = QThreadPool()
         self.pool.setMaxThreadCount(max_workers)
 
@@ -67,7 +65,7 @@ class InferenceManager(QObject):
             print("Already in-flight for:", path)
             return
 
-        task = InferenceTask(path, self.classifier, folder_names=self.folder_names)
+        task = InferenceTask(path, self.classifier)
         self.in_flight[path] = task
 
         task.signals.result.connect(self._on_result)
