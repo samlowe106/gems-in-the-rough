@@ -958,7 +958,7 @@ wheels = [
 ]
 
 [[package]]
-name = "gemmagems"
+name = "gems-in-the-rough"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
