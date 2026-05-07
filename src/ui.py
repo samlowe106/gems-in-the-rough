@@ -21,6 +21,8 @@ class ImageSorterUI(QWidget):
 
         self.resize(width, height)
 
+        self.setWindowTitle("Gems in the Rough")
+
         self.manager = manager
         self.index = 0
 
