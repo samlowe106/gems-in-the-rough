@@ -2,19 +2,20 @@ from typing import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
-Labels = list[str]
+# Signal doesn't accept this as a type because it's
+# a GenericAlias instead of a type
+# Labels = list[str]
 
 
 class WorkerSignals(QObject):
-    result = Signal(str, Labels)  # path, labels
+    result = Signal(str, list)  # path, labels
 
 
 class InferenceTask(QRunnable):
-    def __init__(self, path: str, classifier: Callable, folder_names: list[str]):
+    def __init__(self, path: str, classifier: Callable):
         super().__init__()
         self.path = path
         self.classifier = classifier
-        self.folder_names = folder_names
         self.signals = WorkerSignals()
         self._cancelled = False
 
@@ -26,7 +27,7 @@ class InferenceTask(QRunnable):
         if self._cancelled:
             return
 
-        labels = self.classifier(self.path, categories=self.folder_names)
+        labels = self.classifier(self.path)
 
         if self._cancelled:
             return
@@ -35,7 +36,7 @@ class InferenceTask(QRunnable):
 
 
 class InferenceManager(QObject):
-    result_ready = Signal(str, Labels)  # path, labels
+    result_ready = Signal(str, list)  # path, labels
 
     def __init__(
         self,
@@ -51,7 +52,7 @@ class InferenceManager(QObject):
         self.pool.setMaxThreadCount(max_workers)
 
         self.lookahead = lookahead
-        self.cache: dict[str, Labels] = {}
+        self.cache: dict[str, list[str]] = {}
         self.in_flight: dict[str, InferenceTask] = {}
         self.queue: list[str] = []
 
@@ -71,7 +72,7 @@ class InferenceManager(QObject):
         task.signals.result.connect(self._on_result)
         self.pool.start(task)
 
-    def _on_result(self, path, labels: Labels):
+    def _on_result(self, path, labels: list[str]):
         self.cache[path] = labels
         self.in_flight.pop(path, None)
         self.result_ready.emit(path, labels)
