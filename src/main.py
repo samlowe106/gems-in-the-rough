@@ -10,9 +10,6 @@ from inference_manager import InferenceManager
 from models import Gemma
 from ui import ImageSorterUI
 
-# forces Hugging Face libraries to use local files only
-os.environ["HF_HUB_OFFLINE"] = "1"
-
 image_file_extensions = (".png", ".jpg", ".jpeg")
 accepted_modes = ["manual", "E2B-it", "E4B-it", "4-31B-it"]
 
@@ -22,6 +19,11 @@ def manual_classifier(image_path: str, categories: list[str], top_k: int) -> lis
 
 
 def main(args):
+
+    if not args.folders:
+        args.folders = ["Art", "Memes", "Nature", "People", "Screenshots"]
+
+    print("Folder options:", args.folders)
 
     if not 0 < args.top <= min(len(args.folders), 9):
         # we require at most 9 so the labels are single digit numbers for easier keyboard input
@@ -35,7 +37,7 @@ def main(args):
     classifier = (
         manual_classifier
         if args.mode == "manual"
-        else Gemma(model_name=args.model).classify
+        else Gemma(model_name=args.mode).classify
     )
 
     app = QApplication(sys.argv)
@@ -52,14 +54,9 @@ def main(args):
 
     print(f"Found {len(image_paths)} images.")
 
-    if not args.folders:
-        args.folders = ["Art", "Memes", "Nature", "People", "Screenshots"]
-
-    print("Folder options:", args.folders)
-
     manager = InferenceManager(
-        classifier=lambda path, categories: classifier(
-            path, categories=categories, top_k=args.top
+        classifier=lambda path: classifier(
+            path, categories=args.folders, top_k=args.top
         ),
         image_paths=image_paths,
         max_workers=1,
@@ -68,13 +65,15 @@ def main(args):
 
     ui = ImageSorterUI(
         manager,
-        folders=args.folders,
         num_buttons=args.top,
         input_dir=args.input_dir,
         output_dir=args.output_dir,
     )
     ui.show()
     ui.load()
+
+    # TODO: if the window closes or a KeyboardInterrupt is received, we should
+    #  kill all the threads and clean up the program
     app.exec()
 
 
