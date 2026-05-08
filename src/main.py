@@ -14,7 +14,7 @@ image_file_extensions = (".png", ".jpg", ".jpeg")
 accepted_modes = ["manual", "E2B-it", "E4B-it", "4-31B-it"]
 
 
-def manual_classifier(image_path: str, categories: list[str], top_k: int) -> list[str]:
+def manual_classifier(categories: list[str], top_k: int, *args, **kwargs) -> list[str]:
     return categories[:top_k]
 
 
@@ -35,9 +35,13 @@ def main(args):
         raise ValueError(f"Mode must be one of {accepted_modes}")
 
     classifier = (
-        manual_classifier
+        (lambda x: manual_classifier(args.folders, args.top))
         if args.mode == "manual"
-        else Gemma(model_name=args.mode).classify
+        else Gemma(
+            model_name=args.mode,
+            categories=args.folders,
+            top_k=args.top,
+        ).classify
     )
 
     app = QApplication(sys.argv)
@@ -78,8 +82,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-
-    print(os.getcwd())
 
     # region Argument parsing
     parser = ArgumentParser()
