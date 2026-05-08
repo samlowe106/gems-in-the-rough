@@ -31,6 +31,11 @@ class Gemma:
         self.top_k = top_k
         self.image_size = image_size
 
+        pattern_string = (
+            "^" + " ".join([f"({'|'.join(self.categories)})"] * self.top_k) + "$"
+        )
+        self.pattern = re.compile(pattern_string)
+
     def create_prompt(
         self, image_filepath: str, categories: list[str] = None, top_k: int = None
     ) -> list[dict]:
@@ -66,12 +71,18 @@ class Gemma:
                             " in descending order of confidence from the following categories:"
                             f" {categories}. Your answer should be in exactly the form:\n"
                             f"{required_format}"
-                            "\nseparated by spaces, with no additional text."
+                            "\nseparated by spaces, with no additional text, commas, or other punctuation."
                         ),
                     },
                 ],
             },
         ]
+
+    def _try_sanitize_output(self, text: str) -> str:
+        """
+        Gemma sometimes replies with commas even though we say not to
+        """
+        return text.replace(",", "")
 
     # TODO: this method can have a lot more optional parameters for controlling the generation,
     # e.g. temperature, max_new_tokens, etc.
@@ -81,6 +92,7 @@ class Gemma:
         categories: list[str] = None,
         top_k: int = None,
     ) -> str:
+
         if categories is None:
             categories = self.categories
         if top_k is None:
@@ -122,18 +134,17 @@ class Gemma:
         self,
         response: str,
         categories: list[str] = None,
-        top_k: int = None,
     ) -> bool:
         if categories is None:
             categories = self.categories
-        if top_k is None:
-            top_k = self.top_k
 
-        pattern_string = (
-            "^" + " ".join([f"{'|'.join(self.categories)}"] * self.top_k) + "$"
+        options = response.split(" ")
+        options_set = set(options)
+        print(f"No duplicates: {len(options_set) == len(options)}")
+        print(f"Subset: {options_set.issubset(set(categories))}")
+        return len(options_set) == len(options) and options_set.issubset(
+            set(categories)
         )
-        pattern = re.compile(pattern_string)
-        return bool(pattern.match(response))
 
     def classify(
         self, image_filepath: str, categories: list[str] = None, top_k: int = None
@@ -149,11 +160,11 @@ class Gemma:
 
         response = self._generate_response(image_filepath, categories, top_k)
 
-        if not self._validate_response(response, categories, top_k):
-            raise ValueError(
-                f"Invalid response for {image_filepath}, received: {response}"
-            )
-
         print(f"Raw response for {image_filepath}: {response}")
+
+        response = self._try_sanitize_output(response)
+
+        if not self._validate_response(response):
+            raise ValueError(f"Invalid response for {image_filepath}")
 
         return response.split(" ")
