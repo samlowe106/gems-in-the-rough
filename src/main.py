@@ -59,9 +59,7 @@ def main(args):
     print(f"Found {len(image_paths)} images.")
 
     manager = InferenceManager(
-        classifier=lambda path: classifier(
-            path, categories=args.folders, top_k=args.top
-        ),
+        classifier=classifier,
         image_paths=image_paths,
         max_workers=1,
         lookahead=8,
