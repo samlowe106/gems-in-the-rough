@@ -71,7 +71,7 @@ class Gemma:
                             " in descending order of confidence from the following categories:"
                             f" {categories}. Your answer should be in exactly the form:\n"
                             f"{required_format}"
-                            "\nseparated by spaces, with no additional text, commas, or other punctuation."
+                            "\nseparated by spaces with no punctuation or explanation."
                         ),
                     },
                 ],
@@ -82,7 +82,15 @@ class Gemma:
         """
         Gemma sometimes replies with commas even though we say not to
         """
-        return text.replace(",", "")
+        # remove commas
+        text = text.replace(",", "")
+        # remove duplicates
+        raw_options = text.split(" ")
+        options = []
+        for item in raw_options:
+            if item not in options:
+                options.append(item)
+        return " ".join(options)
 
     # TODO: this method can have a lot more optional parameters for controlling the generation,
     # e.g. temperature, max_new_tokens, etc.
@@ -140,11 +148,9 @@ class Gemma:
 
         options = response.split(" ")
         options_set = set(options)
-        print(f"No duplicates: {len(options_set) == len(options)}")
-        print(f"Subset: {options_set.issubset(set(categories))}")
-        return len(options_set) == len(options) and options_set.issubset(
-            set(categories)
-        )
+        # print(f"No duplicates: {len(options_set) == len(options)}")
+        # print(f"Subset: {options_set.issubset(set(categories))}")
+        return options_set.issubset(set(categories))
 
     def classify(
         self, image_filepath: str, categories: list[str] = None, top_k: int = None
