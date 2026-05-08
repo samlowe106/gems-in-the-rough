@@ -89,3 +89,4 @@ class InferenceManager(QObject):
     def cancel_all(self):
         for task in self.in_flight.values():
             task.cancel()
+        self.pool.waitForDone()

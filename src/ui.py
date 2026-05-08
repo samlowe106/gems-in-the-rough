@@ -189,3 +189,7 @@ class ImageSorterUI(QWidget):
             self.image_display.setPixmap(scaled)
 
         super().resizeEvent(event)
+
+    def closeEvent(self, event):
+        self.manager.cancel_all()
+        super().closeEvent(event)
