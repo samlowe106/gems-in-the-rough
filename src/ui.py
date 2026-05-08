@@ -19,31 +19,30 @@ class Button(QPushButton):
         super().__init__()
 
         self.shortcut = shortcut
-        super().setShortcut(self.shortcut)
 
         self._on_click_template = on_click
         self._on_click: Callable = None
 
-        self.set_thinking()
+        super().setText("Thinking...")
 
         qhbox.addWidget(self)
 
     def _disconnect_button(self):
         if self._on_click is not None:
             super().clicked.disconnect(self._on_click)
-            # for some reason the above line disconnects the shortcut
-            super().setShortcut(self.shortcut)
 
     def set_thinking(self):
         super().setText("Thinking...")
         self._disconnect_button()
         self._on_click = None
+        self.setShortcut("")
 
     def show_result(self, result_label: str, destination_dir=None):
         if destination_dir is None:
             destination_dir = result_label
         super().setText(f"{result_label} ({self.shortcut})")
         self._disconnect_button()
+        self.setShortcut(self.shortcut)
         self._on_click = lambda: self._on_click_template(
             destination_dir=destination_dir
         )
@@ -70,6 +69,7 @@ class ImageSorterUI(QWidget):
         self.resize(width, height)
         self.setWindowTitle(window_title)
 
+        # I'd like to refactor this to just pop the first element
         self.index = 0
 
         # region layout
