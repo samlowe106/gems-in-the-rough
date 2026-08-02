@@ -1,10 +1,12 @@
+import logging
 import os
-import re
 
 from PIL import Image
 
 # transformers, torchvision, accelerate
 from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+logger = logging.getLogger(__name__)
 
 Labels = list[str]
 
@@ -14,7 +16,11 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 
 class Gemma:
     def __init__(
-        self, categories: list[str], top_k: int, model_name="E2B-it", image_size=128
+        self,
+        categories: list[str],
+        top_k: int,
+        model_name: str = "E2B-it",
+        image_size: int = 128,
     ):
         # https://huggingface.co/google/gemma-4-E2B-it
 
@@ -31,13 +37,11 @@ class Gemma:
         self.top_k = top_k
         self.image_size = image_size
 
-        pattern_string = (
-            "^" + " ".join([f"({'|'.join(self.categories)})"] * self.top_k) + "$"
-        )
-        self.pattern = re.compile(pattern_string)
-
     def create_prompt(
-        self, image_filepath: str, categories: list[str] = None, top_k: int = None
+        self,
+        image_filepath: str,
+        categories: list[str] | None = None,
+        top_k: int | None = None,
     ) -> list[dict]:
         if categories is None:
             categories = self.categories
@@ -78,17 +82,19 @@ class Gemma:
             },
         ]
 
-    def _try_sanitize_output(self, text: str) -> str:
+    @staticmethod
+    def _try_sanitize_output(text: str) -> str:
         """
-        Gemma sometimes replies with commas even though we say not to
+        Gemma sometimes replies with commas, or repeats a category, even though
+        we ask it not to. Strip the punctuation and keep the first occurrence of
+        each category, preserving the order it gave them in.
         """
-        # remove commas
         text = text.replace(",", "")
-        # remove duplicates
-        raw_options = text.split(" ")
+        seen: set[str] = set()
         options = []
-        for item in raw_options:
-            if item not in options:
+        for item in text.split():
+            if item not in seen:
+                seen.add(item)
                 options.append(item)
         return " ".join(options)
 
@@ -97,10 +103,9 @@ class Gemma:
     def _generate_response(
         self,
         image_filepath: str,
-        categories: list[str] = None,
-        top_k: int = None,
+        categories: list[str] | None = None,
+        top_k: int | None = None,
     ) -> str:
-
         if categories is None:
             categories = self.categories
         if top_k is None:
@@ -112,7 +117,7 @@ class Gemma:
         # where faster inference and processing many frames outweigh fine-grained detail
         # Use higher budgets for tasks like OCR, document parsing, or reading small text.
         inputs = self._processor.apply_chat_template(
-            self.create_prompt(image_filepath, self.categories, self.top_k),
+            self.create_prompt(image_filepath, categories, top_k),
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
@@ -123,54 +128,59 @@ class Gemma:
         # https://huggingface.co/docs/transformers/llm_tutorial#common-options
         # Temperature: How unpredictable the next selected token will be.
         # High values (>0.8) are good for creative tasks,
-        # low values (e.g. <0.4) for tasks that require “thinking”. Requires do_sample=True.
+        # low values (e.g. <0.4) for tasks that require "thinking". Requires do_sample=True.
+        #
+        # The answer is top_k category names, so budgeting a token per character of
+        # the longest possible answer is a safe over-estimate that still stops the
+        # model from rambling.
         outputs = self._model.generate(
             **inputs,
             temperature=0.2,
             do_sample=True,
-            max_new_tokens=len("".join(self.categories)),
+            max_new_tokens=sum(len(category) for category in categories) + top_k,
         )
-        response = self._processor.decode(
-            outputs[0][input_len:], skip_special_tokens=True
-        )
-
-        # Parse output
-        self._processor.parse_response(response)
-        return response
+        return self._processor.decode(outputs[0][input_len:], skip_special_tokens=True)
 
     def _validate_response(
         self,
         response: str,
-        categories: list[str] = None,
+        categories: list[str] | None = None,
+        top_k: int | None = None,
     ) -> bool:
         if categories is None:
             categories = self.categories
-
-        options = response.split(" ")
-        options_set = set(options)
-        # print(f"No duplicates: {len(options_set) == len(options)}")
-        # print(f"Subset: {options_set.issubset(set(categories))}")
-        return options_set.issubset(set(categories))
-
-    def classify(
-        self, image_filepath: str, categories: list[str] = None, top_k: int = None
-    ) -> Labels:
-
-        if categories is None:
-            categories = self.categories
-
         if top_k is None:
             top_k = self.top_k
 
-        print(f"Classifying {image_filepath} with Gemma...")
+        options = response.split()
+        return (
+            len(options) == top_k
+            and len(set(options)) == len(options)
+            and set(options).issubset(set(categories))
+        )
+
+    def classify(
+        self,
+        image_filepath: str,
+        categories: list[str] | None = None,
+        top_k: int | None = None,
+    ) -> Labels:
+        if categories is None:
+            categories = self.categories
+        if top_k is None:
+            top_k = self.top_k
+
+        logger.debug("Classifying %s with Gemma...", image_filepath)
 
         response = self._generate_response(image_filepath, categories, top_k)
-
-        print(f"Raw response for {image_filepath}: {response}")
+        logger.debug("Raw response for %s: %s", image_filepath, response)
 
         response = self._try_sanitize_output(response)
 
-        if not self._validate_response(response):
-            raise ValueError(f"Invalid response for {image_filepath}")
+        if not self._validate_response(response, categories, top_k):
+            raise ValueError(
+                f"Invalid response for {image_filepath}: {response!r} is not "
+                f"{top_k} distinct categories from {categories}"
+            )
 
-        return response.split(" ")
+        return response.split()

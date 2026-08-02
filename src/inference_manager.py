@@ -1,6 +1,9 @@
-from typing import Callable
+import logging
+from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
+
+logger = logging.getLogger(__name__)
 
 # Signal doesn't accept this as a type because it's
 # a GenericAlias instead of a type
@@ -9,6 +12,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
 class WorkerSignals(QObject):
     result = Signal(str, list)  # path, labels
+    error = Signal(str, str)  # path, message
 
 
 class InferenceTask(QRunnable):
@@ -27,7 +31,15 @@ class InferenceTask(QRunnable):
         if self._cancelled:
             return
 
-        labels = self.classifier(self.path)
+        # An exception escaping QRunnable.run crosses back into C++ and takes the
+        # process with it, so every failure has to be caught and reported here.
+        try:
+            labels = self.classifier(self.path)
+        except Exception as exc:
+            logger.exception("Classification failed for %s", self.path)
+            if not self._cancelled:
+                self.signals.error.emit(str(self.path), str(exc))
+            return
 
         if self._cancelled:
             return
@@ -37,13 +49,14 @@ class InferenceTask(QRunnable):
 
 class InferenceManager(QObject):
     result_ready = Signal(str, list)  # path, labels
+    error_ready = Signal(str, str)  # path, message
 
     def __init__(
         self,
         classifier: Callable,
         image_paths: list[str],
-        max_workers=2,
-        lookahead=8,
+        max_workers: int = 2,
+        lookahead: int = 8,
     ):
         super().__init__()
         self.classifier = classifier
@@ -53,40 +66,47 @@ class InferenceManager(QObject):
 
         self.lookahead = lookahead
         self.cache: dict[str, list[str]] = {}
+        self.errors: dict[str, str] = {}
         self.in_flight: dict[str, InferenceTask] = {}
-        self.queue: list[str] = []
 
         self.current_index = 0
 
-    def submit(self, path):
+    def submit(self, path: str) -> None:
         if path in self.cache:
-            print("Already have result for:", path)
+            logger.debug("Already have a result for %s", path)
             return
         if path in self.in_flight:
-            print("Already in-flight for:", path)
+            logger.debug("Already in flight: %s", path)
             return
 
         task = InferenceTask(path, self.classifier)
         self.in_flight[path] = task
 
         task.signals.result.connect(self._on_result)
+        task.signals.error.connect(self._on_error)
         self.pool.start(task)
 
-    def _on_result(self, path, labels: list[str]):
+    def _on_result(self, path: str, labels: list[str]) -> None:
         self.cache[path] = labels
         self.in_flight.pop(path, None)
         self.result_ready.emit(path, labels)
 
-    def update_window(self, current_index):
+    def _on_error(self, path: str, message: str) -> None:
+        self.errors[path] = message
+        self.in_flight.pop(path, None)
+        self.error_ready.emit(path, message)
+
+    def update_window(self, current_index: int) -> None:
+        """Prefetch classifications for the images just past `current_index`."""
         self.current_index = current_index
 
-        start = current_index
         end = min(len(self.image_paths), current_index + self.lookahead)
 
-        for i in range(start + 1, end):
+        for i in range(current_index + 1, end):
             self.submit(self.image_paths[i])
 
-    def cancel_all(self):
+    def cancel_all(self) -> None:
         for task in self.in_flight.values():
             task.cancel()
+        self.pool.clear()
         self.pool.waitForDone()
