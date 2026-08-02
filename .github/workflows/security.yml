@@ -33,8 +33,17 @@ jobs:
       # would be installed (fails the job if any dependency has a known CVE).
       - name: Export locked dependencies
         run: uv export --frozen --format requirements-txt --no-emit-project -o requirements.txt
+
+      # --no-deps is required, not an optimization. Without it pip-audit builds a
+      # throwaway virtualenv and runs `pip install --dry-run` to resolve the tree.
+      # Nothing pins that venv's interpreter, so it can differ from .python-version
+      # (CI got 3.12), and pip then selects a wheel for the wrong ABI. Its hash is
+      # absent from the lockfile, because uv only ever resolved cp313 wheels under
+      # requires-python >= 3.13.9, and the run dies with a hash mismatch that reads
+      # alarmingly like tampering. The export is already fully pinned and resolved,
+      # so there is nothing for pip to resolve: --no-deps audits it directly.
       - name: Audit dependencies
-        run: uvx pip-audit -r requirements.txt
+        run: uvx pip-audit --no-deps -r requirements.txt
 
   # Static analysis of the source for security issues (results in the Security
   # tab). Free on public repos; private repos need GitHub Advanced Security.

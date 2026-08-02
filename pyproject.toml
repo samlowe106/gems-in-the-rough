@@ -1,6 +1,6 @@
 [project]
 name = "gems-in-the-rough"
-version = "1.0.0"
+version = "1.0.1"
 description = "Sort images into folders with a local Gemma model and human oversight"
 readme = "README.md"
 requires-python = ">=3.13.9"
@@ -29,6 +29,15 @@ dev = [
 # [build-system] plus a proper package name and layout.
 [tool.uv]
 package = false
+
+# Security floors for packages we do not depend on directly, so the resolver cannot
+# pick a version with a known advisory. Nothing here is an import of ours: idna
+# arrives via httpx and setuptools via torch. Drop an entry once the dependency that
+# pulls it in has raised its own floor past this.
+constraint-dependencies = [
+    "idna>=3.15",        # PYSEC-2026-215
+    "setuptools>=83.0.0", # PYSEC-2026-3447
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
