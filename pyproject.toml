@@ -1,16 +1,93 @@
 [project]
 name = "gems-in-the-rough"
 version = "1.0.0"
-description = "Add your description here"
+description = "Sort images into folders with a local Gemma model and human oversight"
 readme = "README.md"
 requires-python = ">=3.13.9"
 dependencies = [
     "accelerate>=1.13.0",
-    "gemma>=3.3.0",
-    "pre-commit>=4.6.0",
+    "pillow>=11.0.0",
     "pyside6>=6.11.0",
-    "seaborn>=0.13.2",
     "torch>=2.11.0",
     "torchvision>=0.26.0",
     "transformers>=5.7.0",
 ]
+
+# Development tooling — installed by `uv sync` (uv syncs the dev group by default).
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-qt>=4.4.0",
+]
+
+# This project is an application, not a distributable library: `uv` installs the
+# dependencies but never builds or installs the project itself. That is what lets
+# the code live in a plain `src/` package and run via `python -m src.main` without
+# packaging it. To ship this as a real package instead, drop this table and add a
+# [build-system] plus a proper package name and layout.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# Default options so a bare `pytest` (or `uv run pytest`) matches CI exactly.
+# --durations=0 reports how long every test took (slowest first).
+addopts = "--verbose --cov=src --cov-report=term-missing --durations=0"
+markers = [
+    "model: tests that load real Gemma weights (slow; deselect with -m 'not model')",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+# Inference runs on QThreadPool workers; without this their lines read as unhit.
+concurrency = ["thread"]
+
+[tool.coverage.report]
+show_missing = true
+# Uncomment to fail the build below a coverage threshold:
+# fail_under = 80
+
+# Ruff (linter). Rule selection lives here, not in the pre-commit args, so your
+# editor's Ruff integration enforces exactly the same rules. The pre-commit hook
+# only adds --fix, so commits auto-apply fixable violations.
+# Black (formatter). Without an explicit target it infers a newer Python than the
+# interpreter running it, and then its own AST safety check fails.
+[tool.black]
+target-version = ["py313"]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+# Added on top of Ruff's defaults (E, F). Full list: https://docs.astral.sh/ruff/rules/
+extend-select = [
+    "I",    # isort: import ordering (replaces the standalone isort tool)
+    "UP",   # pyupgrade: modern syntax for the target Python version
+    "B",    # flake8-bugbear: likely bugs and footguns
+    "B014", # (explicit) redundant exception types in `except`
+    "F841", # (explicit) local variable assigned but never used
+    "SIM",  # flake8-simplify: simpler equivalent code
+    "RET",  # flake8-return: return-statement hygiene
+    "LOG",  # flake8-logging: correct logging usage
+    "G",    # flake8-logging-format: no f-strings / % in log calls
+    "PERF", # perflint: performance anti-patterns
+    "T20",  # flake8-print: flags stray print() (use `# noqa: T201` to allow one)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-exports, not unused imports.
+"__init__.py" = ["F401"]
+
+# ty (type checker). Config lives here rather than in CLI flags so the editor,
+# the CLI, and the pre-commit hook all agree.
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.rules]
+# torch, transformers, and PySide6 are not installed in pre-commit's isolated
+# hook environment, and PySide6's C++ bindings ship no usable stubs regardless.
+unresolved-import = "ignore"

@@ -18,47 +18,39 @@ repos:
       - id: debug-statements
       - id: end-of-file-fixer
       - id: name-tests-test
+        # enforce the conventional test_*.py prefix (default requires *_test.py)
+        args: [--pytest-test-first]
       - id: pretty-format-json
+        # --autofix reformats instead of only failing; keep the author's key order
+        args: [--autofix, --no-sort-keys]
+      # Only acts on files you list under `files:` (it sorts flat "simple" YAML
+      # alphabetically), so it is a no-op until you point it at such a file.
       - id: sort-simple-yaml
       - id: trailing-whitespace
+        # preserve Markdown hard line breaks (a line ending in two spaces)
+        args: [--markdown-linebreak-ext, "md,markdown"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        name: ruff (lint + autofix)
+        # Rules are configured in [tool.ruff.lint] in pyproject.toml (shared with
+        # your editor), replacing the old flake8 + isort pair. --fix makes commits
+        # auto-apply fixable violations.
+        args: [--fix]
 
   - repo: https://github.com/psf/black
-    rev: 26.3.1
+    rev: 26.5.1
     hooks:
       - id: black
         args: [--safe]
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.3.0
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.65
     hooks:
-      - id: flake8
-        args:
-          - --max-line-length=120
-          - --extend-ignore=E203,W503
-          - --per-file-ignores=__init__.py:F401
-
-  - repo: https://github.com/PyCQA/isort
-    rev: 9.0.0a3
-    hooks:
-      - id: isort
-        args: [--profile=black]
-  #        args: [
-  #          --line-length=110,
-  #          --multi-line=3,
-  #          --force-grid-wrap=0,
-  #          --trailing-comma,
-  #          --use-parentheses,
-  #          --ensure-newline-before-comments,
-  #        ]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.20.2"
-    hooks:
-      - id: mypy
-        args:
-          [
-            --no-strict-optional,
-            --ignore-missing-imports,
-            --install-types,
-            --non-interactive,
-          ]
+      # ty reads its config from [tool.ty] in pyproject.toml, not CLI flags, so
+      # the editor, the CLI, and this hook all agree. torch / transformers /
+      # PySide6 are too heavy to install into the isolated hook env, which is why
+      # unresolved-import is downgraded there.
+      - id: ty
