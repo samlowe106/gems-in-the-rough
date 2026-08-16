@@ -32,7 +32,7 @@ jobs:
 
       # Installs uv, provisions Python from .python-version, and caches ~/.cache/uv.
       # setup-uv no longer publishes a moving major tag, so pin a full version.
-      - uses: astral-sh/setup-uv@v9.0.0
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
 
